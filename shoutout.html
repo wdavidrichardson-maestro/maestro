@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Send a Shoutout — Maestro</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=Karla:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f2f4ef; --surface: #ffffff; --ink: #202422; --muted: #62706a; --border: #dde3dc;
+    --accent: #b8791f; --accent-ink: #ffffff; --good: #4f7942; --good-soft: #dfeedb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#14181a; --surface:#1b2123; --ink:#eef1ee; --muted:#9aa8a2; --border:#2b3234; --accent:#d9a441; --accent-ink:#1b1200; --good:#86c176; --good-soft:#1c2e18; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; min-height:100vh; background: var(--bg); color: var(--ink); font-family: "Karla", sans-serif; display:flex; align-items:center; justify-content:center; padding: 24px 16px; }
+  h1 { font-family:"Fraunces", serif; font-size: 26px; margin: 0 0 4px; }
+  .card { background: var(--surface); border:1px solid var(--border); border-radius:18px; padding:26px 22px; max-width:420px; width:100%; box-shadow: 0 2px 14px rgba(0,0,0,0.08); }
+  p.muted { color: var(--muted); font-size: 14px; margin-top:0; }
+  label { display:block; font-size:13px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; margin: 16px 0 6px; }
+  input[type="text"], textarea {
+    width:100%; border:1px solid var(--border); border-radius:10px; padding:12px; font-size:16px;
+    font-family: inherit; background: var(--bg); color: var(--ink);
+  }
+  textarea { resize: vertical; min-height: 90px; }
+  button {
+    margin-top:20px; width:100%; border:none; border-radius:12px; padding:14px; font-size:16px; font-weight:700;
+    background: var(--accent); color: var(--accent-ink); cursor:pointer;
+  }
+  button:disabled { opacity:.6; }
+  .success { text-align:center; }
+  .success .check { font-size:48px; margin-bottom:8px; }
+  .error { color: #b3452f; font-size: 13.5px; margin-top: 10px; display:none; }
+  a.again { display:block; text-align:center; margin-top:16px; color: var(--accent); font-weight:700; text-decoration:none; }
+</style>
+</head>
+<body>
+  <div class="card" id="formCard">
+    <h1>🎵 Send a Shoutout</h1>
+    <p class="muted">Say something positive about a classmate, a group, or the whole class — it'll show up on the board.</p>
+    <label for="nameInput">Your name</label>
+    <input type="text" id="nameInput" placeholder="e.g. Jordan" maxlength="40" />
+    <label for="msgInput">What's the shoutout?</label>
+    <textarea id="msgInput" placeholder="e.g. The trumpets nailed that section today!" maxlength="200"></textarea>
+    <button id="submitBtn">Send it</button>
+    <p class="error" id="errorMsg"></p>
+  </div>
+  <div class="card success" id="successCard" style="display:none;">
+    <div class="check">🎉</div>
+    <h1>Sent!</h1>
+    <p class="muted">Thanks for spreading some positivity.</p>
+    <a href="#" class="again" id="sendAnother">Send another</a>
+  </div>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+<script>
+(function () {
+  "use strict";
+  const params = new URLSearchParams(window.location.search);
+  const cfgParam = params.get("cfg");
+  const errorEl = document.getElementById("errorMsg");
+  function showError(msg) { errorEl.textContent = msg; errorEl.style.display = "block"; }
+
+  if (!cfgParam) {
+    showError("This link is missing its setup information. Ask your teacher to re-share the QR code from Maestro's Control Panel.");
+    document.getElementById("submitBtn").disabled = true;
+    return;
+  }
+
+  let config;
+  try { config = JSON.parse(atob(cfgParam)); }
+  catch (e) { showError("This link looks corrupted. Ask your teacher to re-share the QR code."); document.getElementById("submitBtn").disabled = true; return; }
+
+  let db;
+  try {
+    firebase.initializeApp(config);
+    db = firebase.database();
+  } catch (e) {
+    showError("Couldn't connect right now. Try again in a moment.");
+    document.getElementById("submitBtn").disabled = true;
+    return;
+  }
+
+  const btn = document.getElementById("submitBtn");
+  btn.addEventListener("click", () => {
+    const name = document.getElementById("nameInput").value.trim();
+    const message = document.getElementById("msgInput").value.trim();
+    errorEl.style.display = "none";
+    if (!name) { showError("Please add your name."); return; }
+    if (!message) { showError("Please write your shoutout."); return; }
+    btn.disabled = true; btn.textContent = "Sending…";
+    db.ref("maestroSubmissions").push({ name, message, timestamp: Date.now(), status: "pending" })
+      .then(() => {
+        document.getElementById("formCard").style.display = "none";
+        document.getElementById("successCard").style.display = "block";
+      })
+      .catch((e) => {
+        showError("Couldn't send that — check your connection and try again.");
+        btn.disabled = false; btn.textContent = "Send it";
+      });
+  });
+  document.getElementById("sendAnother").addEventListener("click", (e) => {
+    e.preventDefault();
+    document.getElementById("nameInput").value = "";
+    document.getElementById("msgInput").value = "";
+    document.getElementById("successCard").style.display = "none";
+    document.getElementById("formCard").style.display = "block";
+    btn.disabled = false; btn.textContent = "Send it";
+  });
+})();
+</script>
+</body>
+</html>
